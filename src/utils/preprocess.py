@@ -1,59 +1,59 @@
-# src/preprocess.py
+# utils/preprocess.py
 
 import pandas as pd
 import re
 
-# A função de extração de features permanece a mesma, ela é ótima!
-def extract_features_from_log(log_line: str) -> dict:
-    """
-    Extrai features básicas de uma linha de log.
-    """
-    # Regex para o formato: IP - - [Data] "METHOD /path HTTP/1.1" STATUS SIZE
-    match = re.match(r'(?P<ip>\S+) - - \[(?P<datetime>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) \S+" (?P<status>\d+) (?P<size>\S+)', log_line)
-
-    data = match.groupdict() if match else {}
-
-    # Tratamento para size, que pode ser '-'
-    size = data.get("size", "0")
-    if not size.isdigit():
-        size = "0"
-
-    # Retornamos um dicionário com as features numéricas e os dados originais
-    return {
-        # Features para o modelo
-        "len": len(log_line),
-        "num_digits": sum(c.isdigit() for c in log_line),
-        "num_upper": sum(c.isupper() for c in log_line),
-        "num_special": sum(1 for c in log_line if not c.isalnum() and c not in [" ", "\t"]),
-        "has_sql": int(bool(re.search(r"\b(SELECT|DROP|INSERT|UPDATE|DELETE)\b", log_line, re.I))),
-        "has_path_traversal": int("../" in log_line),
-        "has_script_tag": int("<script" in log_line.lower()),
-        "status": int(data.get("status", 0)),
-        "size": int(size),
-        "method_GET": int(data.get("method") == "GET"),
-        "method_POST": int(data.get("method") == "POST"),
-        # Features para exibição no dashboard (não usadas pelo modelo)
-        "ip": data.get("ip", "N/A"),
-        "method": data.get("method", "N/A"),
-        "raw_log": log_line.strip()
-    }
-
-# ✅ NOVA FUNÇÃO PRINCIPAL
 def parse_log_to_dataframe(log_content: str) -> pd.DataFrame:
     """
-    Recebe todo o conteúdo de um arquivo de log como string,
-    processa cada linha e retorna um DataFrame completo.
+    Parseia o conteúdo de um log, extraindo features para ML e
+    dados estruturados para visualização.
     """
-    # 1. Divide a string de conteúdo em uma lista de linhas
-    logs = log_content.splitlines()
+    log_pattern = re.compile(
+        r'(?P<ip>\S+) - - \[(?P<datetime>[^\]]+)\] "(?P<method>\S+) (?P<path>\S+) \S+" (?P<status>\d+) (?P<size>\S+)'
+    )
 
-    # 2. Aplica a extração de features para cada linha
-    features = [extract_features_from_log(line) for line in logs if line] # 'if line' ignora linhas vazias
+    data_list = []
+    for line in log_content.strip().split('\n'):
+        if not line:
+            continue
 
-    # 3. Converte a lista de dicionários em um DataFrame
-    df = pd.DataFrame(features)
+        match = log_pattern.match(line)
+        log_data = match.groupdict() if match else {}
+
+        size = log_data.get("size", "0")
+        if not size.isdigit():
+            size = "0"
+
+        # Dicionário com todas as features
+        features = {
+            # Features para o modelo de anomalia
+            "len": len(line),
+            "num_digits": sum(c.isdigit() for c in line),
+            "num_upper": sum(c.isupper() for c in line),
+            "num_special": sum(1 for c in line if not c.isalnum() and c not in [" ", "\t"]),
+            "has_sql": int(bool(re.search(r"\b(SELECT|DROP|INSERT|UPDATE|DELETE)\b", line, re.I))),
+            "has_path_traversal": int("../" in line),
+            "has_script_tag": int("<script" in line.lower()),
+
+            # Features básicas do log
+            "ip": log_data.get("ip", "N/A"),
+            "datetime_str": log_data.get("datetime", None),
+            "method": log_data.get("method", "N/A"),
+            "path": log_data.get("path", "N/A"),
+            "status": int(log_data.get("status", 0)),
+            "size": int(size),
+            "raw_log": line.strip(),
+
+            "method_GET": int(log_data.get("method") == "GET"),
+            "method_POST": int(log_data.get("method") == "POST"),
+        }
+        data_list.append(features)
+
+    if not data_list:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(data_list)
+
+    df['timestamp'] = pd.to_datetime(df['datetime_str'], format='%d/%b/%Y:%H:%M:%S %z', errors='coerce')
 
     return df
-
-# A função main() e o if __name__ == "__main__": podem ser removidos ou mantidos
-# apenas para testes independentes do script. Eles não serão usados pelo Streamlit.

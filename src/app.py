@@ -32,6 +32,31 @@ def _get_ts_column(df: pd.DataFrame):
             return ts
     return None
 
+def plot_logs_by_day(df: pd.DataFrame):
+    """
+    Cria um gráfico de linha mostrando o total de logs por dia.
+    """
+    ts_column = _get_ts_column(df)
+    if ts_column is None or ts_column.dropna().empty:
+        return None
+
+    # Agrupa os logs por dia e conta o total
+    # O método resample('D') agrupa por dia (Day)
+    logs_per_day = df.set_index(ts_column).resample('D').size().reset_index(name='count')
+    logs_per_day.columns = ['data', 'total_logs'] # Renomeia colunas para clareza
+
+    fig = px.line(
+        logs_per_day,
+        x='data',
+        y='total_logs',
+        title="Volume Total de Logs por Dia",
+        labels={'data': 'Data', 'total_logs': 'Quantidade de Logs'},
+        markers=True # Adiciona marcadores para visualizar melhor os pontos
+    )
+    fig.update_layout(margin=dict(l=10, r=10, t=40, b=10))
+    fig.update_traces(line=dict(width=2.5))
+    return fig
+
 @st.cache_data(show_spinner=False)
 def cached_parse(log_text: str) -> pd.DataFrame:
     return parse_log_to_dataframe(log_text)
@@ -89,11 +114,11 @@ def _pick_rule(start: pd.Timestamp, end: pd.Timestamp) -> str:
     delta = end - start
     days = delta.days + delta.seconds/86400
     if days <= 3:
-        return "1H"    
+        return "1H"
     elif days <= 180:
-        return "1D"    
+        return "1D"
     else:
-        return "1W"    
+        return "1W"
 
 def plot_requests_over_time(df: pd.DataFrame, date_min=None, date_max=None):
     ts = _get_ts_column(df)
@@ -239,6 +264,14 @@ st.caption(f"**Arquivo:** {uploaded_file.name} · **Tamanho:** {size_info}")
 tab_overview, tab_anoms, tab_logs = st.tabs(["Visão Geral", "Anomalias", "Tabela completa"])
 
 with tab_overview:
+    fig_main = plot_logs_by_day(df)
+    if fig_main:
+        st.plotly_chart(fig_main, use_container_width=True)
+    else:
+        st.warning("Não foi possível gerar o gráfico de volume de logs. Verifique o formato do timestamp.")
+
+    st.divider()
+
     col1, col2 = st.columns(2)
     with col1:
         fig1 = plot_top_ips(df)
