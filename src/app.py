@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.express as px
+import plotly.graph_objects as go
 from datetime import datetime
 
 from utils.preprocess import parse_log_to_dataframe
@@ -34,27 +35,33 @@ def _get_ts_column(df: pd.DataFrame):
 
 def plot_logs_by_day(df: pd.DataFrame):
     """
-    Cria um gráfico de linha mostrando o total de logs por dia.
+    Cria um gráfico de área mostrando o total de logs por dia.
     """
     ts_column = _get_ts_column(df)
     if ts_column is None or ts_column.dropna().empty:
         return None
 
-    # Agrupa os logs por dia e conta o total
-    # O método resample('D') agrupa por dia (Day)
     logs_per_day = df.set_index(ts_column).resample('D').size().reset_index(name='count')
-    logs_per_day.columns = ['data', 'total_logs'] # Renomeia colunas para clareza
+    logs_per_day.columns = ['data', 'total_logs']
 
-    fig = px.line(
+    fig = px.area(
         logs_per_day,
         x='data',
         y='total_logs',
         title="Volume Total de Logs por Dia",
         labels={'data': 'Data', 'total_logs': 'Quantidade de Logs'},
-        markers=True # Adiciona marcadores para visualizar melhor os pontos
+        markers=True,
+        color_discrete_sequence=['#007bff']
     )
-    fig.update_layout(margin=dict(l=10, r=10, t=40, b=10))
-    fig.update_traces(line=dict(width=2.5))
+
+    fig.update_xaxes(rangeslider_visible=True)
+
+    fig.update_layout(
+        margin=dict(l=10, r=10, t=50, b=20),
+        title_x=0.5,
+        hovermode="x unified"
+    )
+
     return fig
 
 @st.cache_data(show_spinner=False)
